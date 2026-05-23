@@ -1,17 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useGetEnergyFeatures, getGetEnergyFeaturesQueryKey } from "@workspace/api-client-react";
 import { useDebounce } from "@/hooks/use-debounce";
-import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import { fixLeafletIcons } from "@/lib/leaflet-icons";
 import { FeatureDetail } from "@/components/feature-detail";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EpcChoroplethLayer } from "@/components/map/epc-choropleth-layer";
 import { LsoaBoundaryLayer } from "@/components/map/lsoa-boundary-layer";
+import { Search, Plus, Minus, X } from "lucide-react";
 
 fixLeafletIcons();
 
-// Custom icons per power type
 const createColorIcon = (color: string) => {
   return L.divIcon({
     className: 'custom-div-icon',
@@ -22,11 +21,11 @@ const createColorIcon = (color: string) => {
 };
 
 const ICONS = {
-  generator: createColorIcon('#00ff88'), // accent/green
-  substation: createColorIcon('#00ccff'), // secondary/cyan
-  tower: createColorIcon('#888888'), // gray
-  line: '#ff8800', // primary/orange (for lines)
-  cable: '#ff8800', 
+  generator: createColorIcon('#00ff88'),
+  substation: createColorIcon('#00ccff'),
+  tower: createColorIcon('#888888'),
+  line: '#ff8800',
+  cable: '#ff8800',
   plant: createColorIcon('#00ff88'),
   default: createColorIcon('#ffffff'),
 };
@@ -39,22 +38,214 @@ const LINE_COLORS = {
 
 function MapEventHandler({ onBoundsChange }: { onBoundsChange: (bounds: L.LatLngBounds) => void }) {
   const map = useMapEvents({
-    moveend: () => {
-      onBoundsChange(map.getBounds());
-    },
-    zoomend: () => {
-      onBoundsChange(map.getBounds());
-    }
+    moveend: () => { onBoundsChange(map.getBounds()); },
+    zoomend: () => { onBoundsChange(map.getBounds()); }
   });
-  
-  // Initial bounds
   useMemo(() => {
-    setTimeout(() => {
-      onBoundsChange(map.getBounds());
-    }, 100);
+    setTimeout(() => { onBoundsChange(map.getBounds()); }, 100);
   }, [map, onBoundsChange]);
-
   return null;
+}
+
+function MapRefCapture({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap();
+  useMemo(() => { mapRef.current = map; }, [map, mapRef]);
+  return null;
+}
+
+function ZoomControls() {
+  const map = useMap();
+  return (
+    <div className="absolute bottom-6 right-4 z-[1000] flex flex-col gap-1">
+      <button
+        onClick={() => map.zoomIn()}
+        className="w-9 h-9 flex items-center justify-center bg-background/90 border border-border rounded-md shadow-md text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        title="Zoom in"
+      >
+        <Plus className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => map.zoomOut()}
+        className="w-9 h-9 flex items-center justify-center bg-background/90 border border-border rounded-md shadow-md text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        title="Zoom out"
+      >
+        <Minus className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+interface PostcodeResult {
+  postcode: string;
+  lat: number;
+  lon: number;
+  admin_district: string | null;
+}
+
+function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PostcodeResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const handleSearch = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim().toUpperCase().replace(/\s+/g, "");
+    if (!q) return;
+
+    setIsSearching(true);
+    setError(null);
+    setResults([]);
+
+    try {
+      // Try exact lookup first
+      const exactRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(q)}`);
+      if (exactRes.ok) {
+        const json = await exactRes.json();
+        if (json.result) {
+          const r = json.result;
+          const result: PostcodeResult = {
+            postcode: r.postcode,
+            lat: r.latitude,
+            lon: r.longitude,
+            admin_district: r.admin_district,
+          };
+          flyToResult(result);
+          setQuery(r.postcode);
+          setShowDropdown(false);
+          return;
+        }
+      }
+
+      // Fall back to autocomplete
+      const autoRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(q)}/autocomplete`);
+      if (autoRes.ok) {
+        const json = await autoRes.json();
+        if (json.result && json.result.length > 0) {
+          // Bulk lookup for coordinates
+          const bulkRes = await fetch("https://api.postcodes.io/postcodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ postcodes: json.result.slice(0, 8) }),
+          });
+          if (bulkRes.ok) {
+            const bulkJson = await bulkRes.json();
+            const found: PostcodeResult[] = (bulkJson.result ?? [])
+              .filter((r: any) => r.result)
+              .map((r: any) => ({
+                postcode: r.result.postcode,
+                lat: r.result.latitude,
+                lon: r.result.longitude,
+                admin_district: r.result.admin_district,
+              }));
+            if (found.length === 1) {
+              flyToResult(found[0]);
+              setQuery(found[0].postcode);
+              setShowDropdown(false);
+            } else if (found.length > 1) {
+              setResults(found);
+              setShowDropdown(true);
+            } else {
+              setError("No results found");
+            }
+          }
+        } else {
+          setError("No results found");
+        }
+      } else {
+        setError("Postcode not found");
+      }
+    } catch {
+      setError("Search failed — check your connection");
+    } finally {
+      setIsSearching(false);
+    }
+  }, [query]);
+
+  const flyToResult = useCallback((result: PostcodeResult) => {
+    if (!mapRef.current) return;
+    mapRef.current.flyTo([result.lat, result.lon], 14, { duration: 1.2 });
+  }, [mapRef]);
+
+  const handleSelect = (result: PostcodeResult) => {
+    flyToResult(result);
+    setQuery(result.postcode);
+    setShowDropdown(false);
+    setResults([]);
+  };
+
+  const handleClear = () => {
+    setQuery("");
+    setResults([]);
+    setError(null);
+    setShowDropdown(false);
+  };
+
+  return (
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-72">
+      <form onSubmit={handleSearch} className="relative">
+        <div className="flex items-center bg-background/95 border border-border rounded-md shadow-lg overflow-hidden">
+          <Search className="w-4 h-4 ml-3 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setError(null);
+              if (!e.target.value) setShowDropdown(false);
+            }}
+            onKeyDown={(e) => e.key === "Escape" && setShowDropdown(false)}
+            placeholder="Search postcode…"
+            className="flex-1 px-2 py-2 text-sm font-mono bg-transparent outline-none placeholder:text-muted-foreground/60"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="px-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={isSearching || !query.trim()}
+            className="px-3 py-2 text-xs font-mono bg-primary/10 border-l border-border text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
+          >
+            {isSearching ? "…" : "Go"}
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-1 px-3 py-1.5 bg-background/95 border border-border rounded-md text-xs font-mono text-destructive shadow-md">
+            {error}
+          </div>
+        )}
+
+        {showDropdown && results.length > 0 && (
+          <ul className="mt-1 bg-background/95 border border-border rounded-md shadow-lg overflow-hidden">
+            {results.map((r) => (
+              <li key={r.postcode}>
+                <button
+                  type="button"
+                  onClick={() => handleSelect(r)}
+                  className="w-full text-left px-3 py-2 text-sm font-mono hover:bg-accent hover:text-accent-foreground transition-colors flex items-baseline gap-2"
+                >
+                  <span className="text-foreground">{r.postcode}</span>
+                  {r.admin_district && (
+                    <span className="text-xs text-muted-foreground truncate">{r.admin_district}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </form>
+    </div>
+  );
 }
 
 export function EnergyMap() {
@@ -62,6 +253,7 @@ export function EnergyMap() {
   const [selectedFeature, setSelectedFeature] = useState<{ id: string, type: 'node'|'way'|'relation' } | null>(null);
   const [showEpc, setShowEpc] = useState(false);
   const [showLsoa, setShowLsoa] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
 
   const debouncedBounds = useDebounce(bounds, 400);
 
@@ -73,7 +265,7 @@ export function EnergyMap() {
   } : null;
 
   const { data: features, isLoading } = useGetEnergyFeatures(
-    queryParams as any, 
+    queryParams as any,
     { query: { enabled: !!queryParams, queryKey: getGetEnergyFeaturesQueryKey(queryParams as any) } }
   );
 
@@ -93,21 +285,23 @@ export function EnergyMap() {
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
         <MapEventHandler onBoundsChange={setBounds} />
+        <MapRefCapture mapRef={mapRef} />
+        <ZoomControls />
 
         {showEpc && <EpcChoroplethLayer />}
         <LsoaBoundaryLayer enabled={showLsoa} />
 
         {features?.map((feature) => {
           if (feature.osmType === 'node' && feature.lat && feature.lon) {
-            const icon = feature.powerType === 'generator' || feature.powerType === 'plant' 
-              ? ICONS.generator 
+            const icon = feature.powerType === 'generator' || feature.powerType === 'plant'
+              ? ICONS.generator
               : feature.powerType === 'substation' ? ICONS.substation
               : feature.powerType === 'tower' ? ICONS.tower
               : ICONS.default;
 
             return (
-              <Marker 
-                key={feature.id} 
+              <Marker
+                key={feature.id}
                 position={[feature.lat, feature.lon]}
                 icon={icon}
                 eventHandlers={{
@@ -116,13 +310,12 @@ export function EnergyMap() {
               />
             );
           } else if (feature.osmType === 'way' && feature.geometry && feature.geometry.coordinates) {
-            // Leaflet expects [lat, lon], GeoJSON provides [lon, lat]
             const positions = (feature.geometry.coordinates as number[][]).map(c => [c[1], c[0]] as [number, number]);
             const color = feature.powerType === 'line' || feature.powerType === 'cable' ? LINE_COLORS.line : LINE_COLORS.default;
-            
+
             return (
-              <Polyline 
-                key={feature.id} 
+              <Polyline
+                key={feature.id}
                 positions={positions}
                 pathOptions={{ color, weight: 3, opacity: 0.8 }}
                 eventHandlers={{
@@ -134,6 +327,9 @@ export function EnergyMap() {
           return null;
         })}
       </MapContainer>
+
+      {/* Postcode search */}
+      <PostcodeSearch mapRef={mapRef} />
 
       {/* Layer toggles */}
       <div className="absolute top-20 right-4 z-[1000] flex flex-col gap-1.5">
@@ -163,7 +359,7 @@ export function EnergyMap() {
         </button>
       </div>
 
-      {/* Loading overlay for data fetching */}
+      {/* Loading overlay */}
       {isLoading && (
         <div className="absolute bottom-6 left-6 z-[1000] bg-background/90 border border-border px-4 py-2 rounded-md shadow-lg flex items-center gap-3">
           <div className="size-2 bg-primary rounded-full animate-ping" />
@@ -173,10 +369,10 @@ export function EnergyMap() {
 
       {/* Detail Panel */}
       {selectedFeature && (
-        <FeatureDetail 
-          osmId={selectedFeature.id} 
-          osmType={selectedFeature.type} 
-          onClose={() => setSelectedFeature(null)} 
+        <FeatureDetail
+          osmId={selectedFeature.id}
+          osmType={selectedFeature.type}
+          onClose={() => setSelectedFeature(null)}
         />
       )}
     </div>
