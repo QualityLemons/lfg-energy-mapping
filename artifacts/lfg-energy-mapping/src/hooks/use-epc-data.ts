@@ -47,11 +47,29 @@ export interface EpcMsoaRow {
   DEFG_pct: number;
 }
 
+export interface EpcInsRow {
+  loftins_n: number;
+  cavitywallins_n: number;
+  solidwallins_n: number;
+  cavity_and_loftins_n: number;
+  number_of_epcs: number;
+  loftins_pct: number;
+  cavitywallins_pct: number;
+  solidwallins_pct: number;
+  cavity_and_loftins_pct: number;
+}
+
 const EPC_BANDS_URL =
   "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-bands-by-oslaua-April25.csv";
 
 const EPC_MSOA_URL =
   "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-bands-by-msoa21-April25.csv";
+
+const EPC_INS_MSOA_URL =
+  "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-ins-recommendations-by-msoa21-April25.csv";
+
+const EPC_INS_LAD_URL =
+  "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-ins-recommendations-by-oslaua-April25.csv";
 
 const UK_LAD_GEOJSON_URL =
   "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/administrative/gb/lad.json";
@@ -130,6 +148,40 @@ export function useEpcMsoaData() {
       }
       return map;
     },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
+async function fetchEpcInsData(url: string, keyField: string): Promise<Map<string, EpcInsRow>> {
+  const response = await fetch(url);
+  const text = await response.text();
+  const result = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    dynamicTyping: true,
+    skipEmptyLines: true,
+  });
+  const map = new Map<string, EpcInsRow>();
+  for (const row of result.data as unknown as (EpcInsRow & Record<string, string>)[]) {
+    const key = row[keyField as keyof typeof row] as string;
+    if (key) map.set(key, row as unknown as EpcInsRow);
+  }
+  return map;
+}
+
+export function useEpcInsMsoaData() {
+  return useQuery<Map<string, EpcInsRow>>({
+    queryKey: ["epc-ins-msoa"],
+    queryFn: () => fetchEpcInsData(EPC_INS_MSOA_URL, "msoa21"),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
+export function useEpcInsLadData() {
+  return useQuery<Map<string, EpcInsRow>>({
+    queryKey: ["epc-ins-lad"],
+    queryFn: () => fetchEpcInsData(EPC_INS_LAD_URL, "oslaua"),
     staleTime: Infinity,
     gcTime: Infinity,
   });

@@ -3,8 +3,8 @@ import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Layout } from "@/components/layout";
 import { EpcChoroplethLayer } from "@/components/map/epc-choropleth-layer";
-import { useEpcData, useEpcMsoaData, getEpcColor } from "@/hooks/use-epc-data";
-import type { EpcBandRow, EpcMsoaRow } from "@/hooks/use-epc-data";
+import { useEpcData, useEpcMsoaData, useEpcInsMsoaData, useEpcInsLadData, getEpcColor } from "@/hooks/use-epc-data";
+import type { EpcBandRow, EpcMsoaRow, EpcInsRow } from "@/hooks/use-epc-data";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -142,11 +142,13 @@ function SelectedAreaPanel({
   epc,
   postcode,
   msoa,
+  ins,
 }: {
   name: string;
   epc: EpcBandRow;
   postcode?: string;
   msoa?: { code: string; name: string; epc: EpcMsoaRow } | null;
+  ins?: { lad?: EpcInsRow | null; msoa?: EpcInsRow | null } | null;
 }) {
   return (
     <div className="space-y-3">
@@ -165,6 +167,7 @@ function SelectedAreaPanel({
             <span className="text-xs text-muted-foreground font-mono">{msoa.epc.number_of_epcs.toLocaleString()} certs</span>
           </div>
           <EpcBandChart epc={msoa.epc} height={100} />
+          {ins?.msoa && <InsulationPanel ins={ins.msoa} label="neighbourhood" />}
         </div>
       )}
 
@@ -183,6 +186,37 @@ function SelectedAreaPanel({
         </div>
       </div>
       <EpcBandChart epc={epc} height={120} />
+      {ins?.lad && <InsulationPanel ins={ins.lad} label="local authority" />}
+    </div>
+  );
+}
+
+function InsulationBar({ label, pct, n }: { label: string; pct: number; n: number }) {
+  const pctDisplay = (pct * 100).toFixed(1);
+  const color = pct >= 0.4 ? "#fb923c" : pct >= 0.2 ? "#fde047" : "#86efac";
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-0.5">
+        <span className="text-xs font-mono text-muted-foreground">{label}</span>
+        <span className="text-xs font-mono font-bold" style={{ color }}>{pctDisplay}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: color }} />
+      </div>
+      <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">{n.toLocaleString()} homes</p>
+    </div>
+  );
+}
+
+function InsulationPanel({ ins, label }: { ins: EpcInsRow; label: string }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2.5">
+      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider font-bold">
+        Insulation recommendations — {label}
+      </p>
+      <InsulationBar label="Loft insulation" pct={ins.loftins_pct} n={ins.loftins_n} />
+      <InsulationBar label="Cavity wall" pct={ins.cavitywallins_pct} n={ins.cavitywallins_n} />
+      <InsulationBar label="Solid wall" pct={ins.solidwallins_pct} n={ins.solidwallins_n} />
     </div>
   );
 }
@@ -223,23 +257,29 @@ interface PostcodeResult {
   adminDistrict: string | null;
   msoaCode: string | null;
   msoaName: string | null;
+  pconCode: string | null;
 }
 
 function EpcPostcodeSearch({
   mapRef,
   epcMap,
   msoaMap,
+  insMsoaMap,
+  insLadMap,
   onResult,
 }: {
   mapRef: React.MutableRefObject<L.Map | null>;
   epcMap: Map<string, EpcBandRow> | undefined;
   msoaMap: Map<string, EpcMsoaRow> | undefined;
+  insMsoaMap: Map<string, EpcInsRow> | undefined;
+  insLadMap: Map<string, EpcInsRow> | undefined;
   onResult: (
     postcode: string,
     code: string,
     name: string,
     epc: EpcBandRow,
-    msoa: { code: string; name: string; epc: EpcMsoaRow } | null
+    msoa: { code: string; name: string; epc: EpcMsoaRow } | null,
+    ins: { lad: EpcInsRow | null; msoa: EpcInsRow | null }
   ) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -271,6 +311,7 @@ function EpcPostcodeSearch({
             adminDistrict: json.result.admin_district ?? null,
             msoaCode: json.result.codes?.msoa ?? null,
             msoaName: json.result.msoa ?? null,
+            pconCode: json.result.codes?.parliamentary_constituency_2024 ?? null,
           });
           return;
         }
@@ -298,6 +339,7 @@ function EpcPostcodeSearch({
                 adminDistrict: r.result.admin_district ?? null,
                 msoaCode: r.result.codes?.msoa ?? null,
                 msoaName: r.result.msoa ?? null,
+                pconCode: r.result.codes?.parliamentary_constituency_2024 ?? null,
               }));
             if (found.length === 1) {
               applyResult(found[0]);
@@ -337,16 +379,20 @@ function EpcPostcodeSearch({
     const msoaEpc = msoaCode ? msoaMap?.get(msoaCode) : undefined;
     const msoa = msoaCode && msoaEpc ? { code: msoaCode, name: msoaName, epc: msoaEpc } : null;
 
+    const ins = {
+      lad: code ? (insLadMap?.get(code) ?? null) : null,
+      msoa: msoaCode ? (insMsoaMap?.get(msoaCode) ?? null) : null,
+    };
+
     if (code && epc) {
-      onResult(result.postcode, code, name, epc, msoa);
+      onResult(result.postcode, code, name, epc, msoa, ins);
     } else if (msoa) {
-      // We have MSOA data even if no LAD match — still show what we have
       setError(`No local authority EPC data for ${name}, showing neighbourhood only`);
-      onResult(result.postcode, code ?? "", name, epc ?? {} as EpcBandRow, msoa);
+      onResult(result.postcode, code ?? "", name, epc ?? {} as EpcBandRow, msoa, ins);
     } else {
       setError(`No EPC data found for ${name}`);
     }
-  }, [mapRef, epcMap, msoaMap, onResult]);
+  }, [mapRef, epcMap, msoaMap, insMsoaMap, insLadMap, onResult]);
 
   const handleClear = () => {
     setQuery("");
@@ -420,12 +466,15 @@ function EpcPostcodeSearch({
 export default function EpcPage() {
   const { data, isLoading } = useEpcData();
   const { data: msoaMap } = useEpcMsoaData();
+  const { data: insMsoaMap } = useEpcInsMsoaData();
+  const { data: insLadMap } = useEpcInsLadData();
   const [selectedArea, setSelectedArea] = useState<{
     name: string;
     epc: EpcBandRow;
     postcode?: string;
     code: string;
     msoa?: { code: string; name: string; epc: EpcMsoaRow } | null;
+    ins?: { lad: EpcInsRow | null; msoa: EpcInsRow | null } | null;
   } | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
@@ -434,22 +483,25 @@ export default function EpcPage() {
     code: string,
     name: string,
     epc: EpcBandRow,
-    msoa: { code: string; name: string; epc: EpcMsoaRow } | null
+    msoa: { code: string; name: string; epc: EpcMsoaRow } | null,
+    ins: { lad: EpcInsRow | null; msoa: EpcInsRow | null }
   ) => {
-    setSelectedArea({ name, epc, postcode, code, msoa });
+    setSelectedArea({ name, epc, postcode, code, msoa, ins });
   }, []);
 
   const handleAreaClick = useCallback((name: string, epc: EpcBandRow) => {
     const code = data?.epcMap
       ? Array.from(data.epcMap.entries()).find(([, v]) => v === epc)?.[0] ?? ""
       : "";
-    setSelectedArea({ name, epc, code });
-  }, [data]);
+    const ins = code ? { lad: insLadMap?.get(code) ?? null, msoa: null } : null;
+    setSelectedArea({ name, epc, code, ins });
+  }, [data, insLadMap]);
 
   const handleRankSelect = useCallback((code: string, name: string) => {
     const epc = data?.epcMap?.get(code);
     if (!epc) return;
-    setSelectedArea({ name, epc, code });
+    const ins = { lad: insLadMap?.get(code) ?? null, msoa: null };
+    setSelectedArea({ name, epc, code, ins });
     // Find a representative point for this LAD from the geojson and fly there
     const feature = data?.geojson.features.find((f) => f.properties?.LAD13CD === code);
     if (feature && mapRef.current) {
@@ -498,6 +550,8 @@ export default function EpcPage() {
               mapRef={mapRef}
               epcMap={data.epcMap}
               msoaMap={msoaMap}
+              insMsoaMap={insMsoaMap}
+              insLadMap={insLadMap}
               onResult={handlePostcodeResult}
             />
           )}
@@ -557,6 +611,7 @@ export default function EpcPage() {
                         epc={selectedArea.epc}
                         postcode={selectedArea.postcode}
                         msoa={selectedArea.msoa}
+                        ins={selectedArea.ins}
                       />
                     </CardContent>
                   </Card>
