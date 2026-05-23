@@ -6,6 +6,7 @@ import L from "leaflet";
 import { fixLeafletIcons } from "@/lib/leaflet-icons";
 import { FeatureDetail } from "@/components/feature-detail";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EpcChoroplethLayer } from "@/components/map/epc-choropleth-layer";
 
 fixLeafletIcons();
 
@@ -58,6 +59,7 @@ function MapEventHandler({ onBoundsChange }: { onBoundsChange: (bounds: L.LatLng
 export function EnergyMap() {
   const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<{ id: string, type: 'node'|'way'|'relation' } | null>(null);
+  const [showEpc, setShowEpc] = useState(false);
 
   const debouncedBounds = useDebounce(bounds, 400);
 
@@ -86,6 +88,8 @@ export function EnergyMap() {
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
         <MapEventHandler onBoundsChange={setBounds} />
+
+        {showEpc && <EpcChoroplethLayer />}
 
         {features?.map((feature) => {
           if (feature.osmType === 'node' && feature.lat && feature.lon) {
@@ -124,6 +128,20 @@ export function EnergyMap() {
           return null;
         })}
       </MapContainer>
+
+      {/* EPC overlay toggle */}
+      <button
+        onClick={() => setShowEpc((v) => !v)}
+        className={`absolute top-20 right-4 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-mono shadow-md transition-colors ${
+          showEpc
+            ? "bg-green-600 border-green-500 text-white"
+            : "bg-background/90 border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+        }`}
+        title="Toggle UK EPC ratings overlay"
+      >
+        <span className={`size-2 rounded-full ${showEpc ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
+        EPC overlay
+      </button>
 
       {/* Loading overlay for data fetching */}
       {isLoading && (

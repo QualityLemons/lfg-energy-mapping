@@ -7,6 +7,7 @@ import HomePage from "@/pages/home";
 import StatsPage from "@/pages/stats";
 import RecentEditsPage from "@/pages/recent";
 import ContributePage from "@/pages/contribute";
+import EpcPage from "@/pages/epc";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/stats" component={StatsPage} />
       <Route path="/recent" component={RecentEditsPage} />
       <Route path="/contribute" component={ContributePage} />
+      <Route path="/epc" component={EpcPage} />
       <Route component={NotFound} />
     </Switch>
   );

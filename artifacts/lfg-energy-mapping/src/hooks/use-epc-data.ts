@@ -1,0 +1,142 @@
+import { useQuery } from "@tanstack/react-query";
+import Papa from "papaparse";
+
+export interface EpcBandRow {
+  oslaua: string;
+  A_n: number;
+  B_n: number;
+  C_n: number;
+  D_n: number;
+  E_n: number;
+  F_n: number;
+  G_n: number;
+  number_of_epcs: number;
+  A_pct: number;
+  B_pct: number;
+  C_pct: number;
+  D_pct: number;
+  E_pct: number;
+  F_pct: number;
+  G_pct: number;
+  ABC_n: number;
+  ABC_pct: number;
+  DEFG_n: number;
+  DEFG_pct: number;
+}
+
+const EPC_BANDS_URL =
+  "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-bands-by-oslaua-April25.csv";
+
+const UK_LAD_GEOJSON_URL =
+  "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/administrative/gb/lad.json";
+
+async function fetchEpcBands(): Promise<Map<string, EpcBandRow>> {
+  const response = await fetch(EPC_BANDS_URL);
+  const text = await response.text();
+  const result = Papa.parse<EpcBandRow>(text, {
+    header: true,
+    dynamicTyping: true,
+    skipEmptyLines: true,
+  });
+  const map = new Map<string, EpcBandRow>();
+  for (const row of result.data) {
+    if (row.oslaua) map.set(row.oslaua, row);
+  }
+  return map;
+}
+
+async function fetchUkBoundaries(): Promise<GeoJSON.FeatureCollection> {
+  const response = await fetch(UK_LAD_GEOJSON_URL);
+  return response.json() as Promise<GeoJSON.FeatureCollection>;
+}
+
+export interface EpcEnrichedFeature extends GeoJSON.Feature {
+  properties: {
+    LAD13CD: string;
+    LAD13NM: string;
+    epc: EpcBandRow | null;
+  };
+}
+
+export interface EpcDataResult {
+  geojson: GeoJSON.FeatureCollection;
+  epcMap: Map<string, EpcBandRow>;
+  nationalTotals: {
+    A: number;
+    B: number;
+    C: number;
+    D: number;
+    E: number;
+    F: number;
+    G: number;
+    total: number;
+    abcPct: number;
+  };
+  topAreas: Array<{ name: string; code: string; abcPct: number; total: number }>;
+  bottomAreas: Array<{ name: string; code: string; abcPct: number; total: number }>;
+}
+
+export function getEpcColor(abcPct: number | null | undefined): string {
+  if (abcPct == null) return "#d1d5db";
+  if (abcPct >= 0.6) return "#15803d";
+  if (abcPct >= 0.5) return "#22c55e";
+  if (abcPct >= 0.4) return "#86efac";
+  if (abcPct >= 0.35) return "#fde047";
+  if (abcPct >= 0.28) return "#fb923c";
+  if (abcPct >= 0.2) return "#ef4444";
+  return "#991b1b";
+}
+
+export function useEpcData() {
+  return useQuery<EpcDataResult>({
+    queryKey: ["epc-data"],
+    queryFn: async () => {
+      const [epcMap, boundaries] = await Promise.all([
+        fetchEpcBands(),
+        fetchUkBoundaries(),
+      ]);
+
+      const enrichedFeatures = boundaries.features.map((feature) => {
+        const code = feature.properties?.LAD13CD as string;
+        const epc = epcMap.get(code) ?? null;
+        return {
+          ...feature,
+          properties: {
+            ...feature.properties,
+            epc,
+          },
+        };
+      });
+
+      const allRows = Array.from(epcMap.values());
+      const A = allRows.reduce((s, r) => s + (r.A_n ?? 0), 0);
+      const B = allRows.reduce((s, r) => s + (r.B_n ?? 0), 0);
+      const C = allRows.reduce((s, r) => s + (r.C_n ?? 0), 0);
+      const D = allRows.reduce((s, r) => s + (r.D_n ?? 0), 0);
+      const E = allRows.reduce((s, r) => s + (r.E_n ?? 0), 0);
+      const F = allRows.reduce((s, r) => s + (r.F_n ?? 0), 0);
+      const G = allRows.reduce((s, r) => s + (r.G_n ?? 0), 0);
+      const total = allRows.reduce((s, r) => s + (r.number_of_epcs ?? 0), 0);
+
+      const areaList = enrichedFeatures
+        .filter((f) => f.properties.epc && f.properties.epc.number_of_epcs >= 500)
+        .map((f) => ({
+          name: f.properties.LAD13NM as string,
+          code: f.properties.LAD13CD as string,
+          abcPct: (f.properties.epc as EpcBandRow).ABC_pct,
+          total: (f.properties.epc as EpcBandRow).number_of_epcs,
+        }))
+        .sort((a, b) => b.abcPct - a.abcPct);
+
+      return {
+        geojson: { ...boundaries, features: enrichedFeatures } as GeoJSON.FeatureCollection,
+        epcMap,
+        nationalTotals: { A, B, C, D, E, F, G, total, abcPct: (A + B + C) / total },
+        topAreas: areaList.slice(0, 10),
+        bottomAreas: areaList.slice(-10).reverse(),
+      };
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}

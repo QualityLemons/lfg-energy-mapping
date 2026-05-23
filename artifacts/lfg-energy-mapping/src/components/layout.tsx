@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Map, Activity, ListIcon, Info, LogOut } from "lucide-react";
+import { Map, Activity, ListIcon, Info, LogOut, Home } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -40,6 +40,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </Link>
             <Link href="/contribute" className={`px-3 py-1.5 rounded-sm text-sm font-medium transition-colors hover:bg-secondary/20 hover:text-secondary ${location === "/contribute" ? "bg-secondary/10 text-secondary" : "text-muted-foreground"}`}>
               <span className="flex items-center gap-2"><Info className="size-4" /> Contribute</span>
+            </Link>
+            <Link href="/epc" className={`px-3 py-1.5 rounded-sm text-sm font-medium transition-colors hover:bg-secondary/20 hover:text-secondary ${location === "/epc" ? "bg-secondary/10 text-secondary" : "text-muted-foreground"}`}>
+              <span className="flex items-center gap-2"><Home className="size-4" /> EPC Ratings</span>
             </Link>
           </nav>
         </div>
