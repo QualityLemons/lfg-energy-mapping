@@ -51,6 +51,64 @@ export interface EnergyFeature {
   lastEdited?: string | null;
 }
 
+export type IndustrialAreaOsmType = typeof IndustrialAreaOsmType[keyof typeof IndustrialAreaOsmType];
+
+
+export const IndustrialAreaOsmType = {
+  node: 'node',
+  way: 'way',
+  relation: 'relation',
+} as const;
+
+export interface IndustrialArea {
+  /** Unique identifier (osmType + osmId) */
+  id: string;
+  osmType: IndustrialAreaOsmType;
+  osmId: string;
+  /** @nullable */
+  lat?: number | null;
+  /** @nullable */
+  lon?: number | null;
+  geometry?: GeoGeometry;
+  tags: OsmTags;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  landuse?: string | null;
+  /** @nullable */
+  industrial?: string | null;
+}
+
+export type FlexibilityZoneLevel = typeof FlexibilityZoneLevel[keyof typeof FlexibilityZoneLevel];
+
+
+export const FlexibilityZoneLevel = {
+  HV: 'HV',
+  LV: 'LV',
+} as const;
+
+export interface FlexibilityZone {
+  level: FlexibilityZoneLevel;
+  code: string;
+  name: string;
+  /** @nullable */
+  licenceArea?: string | null;
+  /** @nullable */
+  product?: string | null;
+  /** @nullable */
+  substationName?: string | null;
+  /** @nullable */
+  substationNumber?: string | null;
+}
+
+export interface FlexibilityLookup {
+  postcode: string;
+  source: string;
+  sourceUrl?: string;
+  zones: FlexibilityZone[];
+  note?: string;
+}
+
 export interface TypeCount {
   type: string;
   count: number;
@@ -116,6 +174,13 @@ east: number;
  * Comma-separated list of power types to filter (line,substation,generator,tower,plant,cable)
  */
 types?: string;
+};
+
+export type GetIndustrialAreasParams = {
+south: number;
+west: number;
+north: number;
+east: number;
 };
 
 export type GetRecentEditsParams = {

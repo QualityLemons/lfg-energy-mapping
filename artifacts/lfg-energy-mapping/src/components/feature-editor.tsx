@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { useCreateChangeset, useUpdateFeatureTags, getGetEnergyFeaturesQueryKey, getGetEnergyFeatureQueryKey, closeChangeset } from "@workspace/api-client-react";
+import {
+  getGetEnergyFeatureQueryKey,
+  getGetEnergyFeaturesQueryKey,
+  useCloseChangeset,
+  useCreateChangeset,
+  useUpdateFeatureTags,
+  type EnergyFeature,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { EnergyFeature } from "@workspace/api-client-react/src/generated/api.schemas";
 import { X, Plus, Trash2, Save, AlertCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,13 +31,9 @@ export function FeatureEditor({ feature, onClose }: FeatureEditorProps) {
 
   const createChangeset = useCreateChangeset();
   const updateTags = useUpdateFeatureTags();
-  // We're skipping useCloseChangeset because the API generated doesn't seem to have it, 
-  // or we can assume updateTags handles it or we use whatever we have.
-  // Actually, wait, let's check API spec. The prompt says "useCloseChangeset" but it's not exported. Wait, I should import if it exists.
-  // We'll leave out useCloseChangeset for now if it wasn't generated, but the instructions say "useCloseChangeset() — mutation, params: changesetId". 
-  // Let's import it from api-client-react if we can. 
+  const closeChangeset = useCloseChangeset();
 
-  const isSubmitting = createChangeset.isPending || updateTags.isPending;
+  const isSubmitting = createChangeset.isPending || updateTags.isPending || closeChangeset.isPending;
 
   const handleAddTag = () => {
     if (!newKey.trim() || !newValue.trim()) return;

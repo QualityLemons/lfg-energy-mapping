@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useGetEnergyFeature, getGetEnergyFeatureQueryKey, useGetMe } from "@workspace/api-client-react";
+import { useGetEnergyFeature, getGetEnergyFeatureQueryKey, getGetMeQueryKey, useGetMe } from "@workspace/api-client-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { FeatureEditor } from "./feature-editor";
@@ -15,7 +15,7 @@ interface FeatureDetailProps {
 }
 
 export function FeatureDetail({ osmId, osmType, onClose }: FeatureDetailProps) {
-  const { data: user } = useGetMe({ query: { retry: false } });
+  const { data: user } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false } });
   const { data: feature, isLoading } = useGetEnergyFeature(osmType, osmId, {
     query: { enabled: !!osmId && !!osmType, queryKey: getGetEnergyFeatureQueryKey(osmType, osmId) }
   });

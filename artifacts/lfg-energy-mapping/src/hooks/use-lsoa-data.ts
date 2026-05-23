@@ -31,6 +31,7 @@ const WEST_MIDLANDS_LADS: Record<string, string> = {
 export interface LsoaFeatureProperties {
   LSOA11CD: string;
   LSOA11NM: string;
+  LSOA21CD?: string | null;
   LSOA21NM?: string;
   ladName: string;
 }
@@ -63,15 +64,16 @@ async function fetchLadLsoas(
   const res = await fetch(`${BASE}/${ladCode}.json`);
   const data: GeoJSON.FeatureCollection = await res.json();
   return data.features.map((f) => {
-    const nm = (f.properties as { LSOA11NM: string }).LSOA11NM;
+    const properties = f.properties as Pick<LsoaFeatureProperties, "LSOA11CD" | "LSOA11NM">;
+    const nm = properties.LSOA11NM;
     return {
       ...f,
       properties: {
-        ...f.properties,
+        ...properties,
         LSOA21NM: nm,
         LSOA21CD: csv21.get(nm) ?? null,
         ladName,
-      } as LsoaFeatureProperties,
+      },
     };
   });
 }

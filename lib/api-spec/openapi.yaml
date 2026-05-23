@@ -76,6 +76,67 @@ paths:
         "400":
           description: Invalid bounding box
 
+  /energy/industrial-areas:
+    get:
+      operationId: getIndustrialAreas
+      tags: [energy]
+      summary: Query industrial areas in bounding box
+      description: Returns OpenStreetMap industrial landuse and estate-like features within the given bounding box using Overpass API
+      parameters:
+        - name: south
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: west
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: north
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: east
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of industrial areas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IndustrialArea"
+        "400":
+          description: Invalid bounding box
+
+  /energy/flexibility/postcode/{postcode}:
+    get:
+      operationId: getFlexibilityByPostcode
+      tags: [energy]
+      summary: Look up NGED flexibility zones for a postcode
+      description: Returns National Grid Electricity Distribution Constraint Management Zones that include the searched postcode
+      parameters:
+        - name: postcode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Flexibility zones for the postcode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlexibilityLookup"
+        "400":
+          description: Invalid postcode
+
   /energy/feature/{osmType}/{osmId}:
     get:
       operationId: getEnergyFeature
@@ -319,6 +380,70 @@ components:
       type: object
       additionalProperties:
         type: string
+
+    IndustrialArea:
+      type: object
+      required: [id, osmType, osmId, tags]
+      properties:
+        id:
+          type: string
+          description: Unique identifier (osmType + osmId)
+        osmType:
+          type: string
+          enum: [node, way, relation]
+        osmId:
+          type: string
+        lat:
+          type: ["number", "null"]
+        lon:
+          type: ["number", "null"]
+        geometry:
+          $ref: "#/components/schemas/GeoGeometry"
+        tags:
+          $ref: "#/components/schemas/OsmTags"
+        name:
+          type: ["string", "null"]
+        landuse:
+          type: ["string", "null"]
+        industrial:
+          type: ["string", "null"]
+
+    FlexibilityLookup:
+      type: object
+      required: [postcode, source, zones]
+      properties:
+        postcode:
+          type: string
+        source:
+          type: string
+        sourceUrl:
+          type: string
+        zones:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlexibilityZone"
+        note:
+          type: string
+
+    FlexibilityZone:
+      type: object
+      required: [level, code, name]
+      properties:
+        level:
+          type: string
+          enum: [HV, LV]
+        code:
+          type: string
+        name:
+          type: string
+        licenceArea:
+          type: ["string", "null"]
+        product:
+          type: ["string", "null"]
+        substationName:
+          type: ["string", "null"]
+        substationNumber:
+          type: ["string", "null"]
 
     EnergyStats:
       type: object
