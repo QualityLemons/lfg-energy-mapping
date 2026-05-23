@@ -8,6 +8,10 @@ const router: IRouter = Router();
 
 const OVERPASS_API = "https://overpass-api.de/api/interpreter";
 const OSM_API = "https://api.openstreetmap.org/api/0.6";
+const OVERPASS_HEADERS = {
+  "Content-Type": "application/x-www-form-urlencoded",
+  "User-Agent": "lfg-energy-mapping/0.0.0 (local development)",
+};
 
 interface OverpassElement {
   type: "node" | "way" | "relation";
@@ -29,10 +33,8 @@ function transformElement(el: OverpassElement) {
     const coords = el.geometry.map((g) => [g.lon, g.lat]);
     geometry = { type: "LineString", coordinates: coords };
     if (!lat) {
-      lat =
-        el.geometry.reduce((s, g) => s + g.lat, 0) / el.geometry.length;
-      lon =
-        el.geometry.reduce((s, g) => s + g.lon, 0) / el.geometry.length;
+      lat = el.geometry.reduce((s, g) => s + g.lat, 0) / el.geometry.length;
+      lon = el.geometry.reduce((s, g) => s + g.lon, 0) / el.geometry.length;
     }
   }
 
@@ -64,7 +66,10 @@ router.get("/energy/features", async (req: Request, res: Response) => {
   const { south, west, north, east, types } = parsed.data;
 
   const typeFilter = types
-    ? types.split(",").map((t) => t.trim()).filter(Boolean)
+    ? types
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
     : null;
 
   const bbox = `${south},${west},${north},${east}`;
@@ -74,10 +79,12 @@ router.get("/energy/features", async (req: Request, res: Response) => {
   let relQueries = `relation["power"](${bbox});`;
 
   if (typeFilter && typeFilter.length > 0) {
-    const vals = typeFilter.map((t) => `"${t}"`).join("|");
-    nodeQueries = `node["power"~${vals}](${bbox});`;
-    wayQueries = `way["power"~${vals}](${bbox});`;
-    relQueries = `relation["power"~${vals}](${bbox});`;
+    const vals = typeFilter
+      .map((t) => t.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&"))
+      .join("|");
+    nodeQueries = `node["power"~"${vals}"](${bbox});`;
+    wayQueries = `way["power"~"${vals}"](${bbox});`;
+    relQueries = `relation["power"~"${vals}"](${bbox});`;
   }
 
   const query = `[out:json][timeout:25];(${nodeQueries}${wayQueries}${relQueries});out body geom;`;
@@ -85,7 +92,7 @@ router.get("/energy/features", async (req: Request, res: Response) => {
   try {
     const response = await fetch(OVERPASS_API, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: OVERPASS_HEADERS,
       body: `data=${encodeURIComponent(query)}`,
     });
 
@@ -183,13 +190,15 @@ router.get("/energy/stats", async (req: Request, res: Response) => {
       const q = `[out:json][timeout:30];nwr["power"="${key}"];out count;`;
       return fetch(OVERPASS_API, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: OVERPASS_HEADERS,
         body: `data=${encodeURIComponent(q)}`,
         signal: AbortSignal.timeout(35000),
       })
         .then((r) => r.json())
         .then((d: unknown) => {
-          const data = d as { elements?: Array<{ tags?: Record<string, string> }> };
+          const data = d as {
+            elements?: Array<{ tags?: Record<string, string> }>;
+          };
           const tags = data.elements?.[0]?.tags ?? {};
           return Number(tags.total ?? 0);
         })
@@ -210,13 +219,15 @@ router.get("/energy/stats", async (req: Request, res: Response) => {
       const q = `[out:json][timeout:30];nwr["power"="generator"]["generator:source"="${key}"];out count;`;
       return fetch(OVERPASS_API, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: OVERPASS_HEADERS,
         body: `data=${encodeURIComponent(q)}`,
         signal: AbortSignal.timeout(35000),
       })
         .then((r) => r.json())
         .then((d: unknown) => {
-          const data = d as { elements?: Array<{ tags?: Record<string, string> }> };
+          const data = d as {
+            elements?: Array<{ tags?: Record<string, string> }>;
+          };
           const tags = data.elements?.[0]?.tags ?? {};
           return Number(tags.total ?? 0);
         })
