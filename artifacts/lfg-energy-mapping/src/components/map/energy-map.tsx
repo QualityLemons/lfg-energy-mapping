@@ -7,6 +7,7 @@ import { fixLeafletIcons } from "@/lib/leaflet-icons";
 import { FeatureDetail } from "@/components/feature-detail";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EpcChoroplethLayer } from "@/components/map/epc-choropleth-layer";
+import { LsoaBoundaryLayer } from "@/components/map/lsoa-boundary-layer";
 
 fixLeafletIcons();
 
@@ -60,6 +61,7 @@ export function EnergyMap() {
   const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<{ id: string, type: 'node'|'way'|'relation' } | null>(null);
   const [showEpc, setShowEpc] = useState(false);
+  const [showLsoa, setShowLsoa] = useState(false);
 
   const debouncedBounds = useDebounce(bounds, 400);
 
@@ -93,6 +95,7 @@ export function EnergyMap() {
         <MapEventHandler onBoundsChange={setBounds} />
 
         {showEpc && <EpcChoroplethLayer />}
+        <LsoaBoundaryLayer enabled={showLsoa} />
 
         {features?.map((feature) => {
           if (feature.osmType === 'node' && feature.lat && feature.lon) {
@@ -132,19 +135,33 @@ export function EnergyMap() {
         })}
       </MapContainer>
 
-      {/* EPC overlay toggle */}
-      <button
-        onClick={() => setShowEpc((v) => !v)}
-        className={`absolute top-20 right-4 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-mono shadow-md transition-colors ${
-          showEpc
-            ? "bg-green-600 border-green-500 text-white"
-            : "bg-background/90 border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-        }`}
-        title="Toggle UK EPC ratings overlay"
-      >
-        <span className={`size-2 rounded-full ${showEpc ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
-        EPC overlay
-      </button>
+      {/* Layer toggles */}
+      <div className="absolute top-20 right-4 z-[1000] flex flex-col gap-1.5">
+        <button
+          onClick={() => setShowLsoa((v) => !v)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-mono shadow-md transition-colors ${
+            showLsoa
+              ? "bg-blue-600 border-blue-500 text-white"
+              : "bg-background/90 border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+          }`}
+          title="Toggle LSOA postcode boundaries"
+        >
+          <span className={`size-2 rounded-full ${showLsoa ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
+          LSOA areas
+        </button>
+        <button
+          onClick={() => setShowEpc((v) => !v)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-mono shadow-md transition-colors ${
+            showEpc
+              ? "bg-green-600 border-green-500 text-white"
+              : "bg-background/90 border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+          }`}
+          title="Toggle UK EPC ratings overlay"
+        >
+          <span className={`size-2 rounded-full ${showEpc ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
+          EPC ratings
+        </button>
+      </div>
 
       {/* Loading overlay for data fetching */}
       {isLoading && (
