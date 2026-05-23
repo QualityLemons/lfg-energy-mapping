@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: LFG Energy Mapping API - OpenStreetMap energy infrastructure viewer and editor
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: energy
+    description: Energy infrastructure data from OpenStreetMap
+  - name: auth
+    description: OSM OAuth authentication
+  - name: changesets
+    description: OSM changeset management for contributing edits
 paths:
   /healthz:
     get:
@@ -24,6 +30,238 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /energy/features:
+    get:
+      operationId: getEnergyFeatures
+      tags: [energy]
+      summary: Query energy features in bounding box
+      description: Returns OSM energy infrastructure features within the given bounding box using Overpass API
+      parameters:
+        - name: south
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: west
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: north
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: east
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: types
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Comma-separated list of power types to filter (line,substation,generator,tower,plant,cable)
+      responses:
+        "200":
+          description: List of energy features
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnergyFeature"
+        "400":
+          description: Invalid bounding box
+
+  /energy/feature/{osmType}/{osmId}:
+    get:
+      operationId: getEnergyFeature
+      tags: [energy]
+      summary: Get a specific OSM feature's full details
+      parameters:
+        - name: osmType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [node, way, relation]
+        - name: osmId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feature details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnergyFeature"
+        "404":
+          description: Feature not found
+
+  /energy/stats:
+    get:
+      operationId: getEnergyStats
+      tags: [energy]
+      summary: Global energy infrastructure statistics
+      description: Returns counts and breakdowns of energy features by type
+      responses:
+        "200":
+          description: Energy infrastructure statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnergyStats"
+
+  /energy/recent-edits:
+    get:
+      operationId: getRecentEdits
+      tags: [energy]
+      summary: Recent energy-related changesets
+      description: Returns the most recent OSM changesets that touched energy infrastructure
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: List of recent edits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecentEdit"
+
+  /auth/osm/login:
+    get:
+      operationId: startOsmLogin
+      tags: [auth]
+      summary: Initiate OSM OAuth 2.0 login
+      responses:
+        "302":
+          description: Redirect to OSM OAuth authorization page
+
+  /auth/osm/callback:
+    get:
+      operationId: osmLoginCallback
+      tags: [auth]
+      summary: OSM OAuth callback
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to app after successful login
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated OSM user
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OsmUser"
+        "401":
+          description: Not authenticated
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out
+      responses:
+        "200":
+          description: Logged out successfully
+
+  /changesets:
+    post:
+      operationId: createChangeset
+      tags: [changesets]
+      summary: Create a new OSM changeset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangesetInput"
+      responses:
+        "201":
+          description: Changeset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Changeset"
+        "401":
+          description: Not authenticated
+
+  /changesets/{changesetId}/close:
+    put:
+      operationId: closeChangeset
+      tags: [changesets]
+      summary: Close an open changeset
+      parameters:
+        - name: changesetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Changeset closed
+        "401":
+          description: Not authenticated
+
+  /features/{osmType}/{osmId}/tags:
+    patch:
+      operationId: updateFeatureTags
+      tags: [changesets]
+      summary: Update tags on an OSM feature
+      parameters:
+        - name: osmType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [node, way, relation]
+        - name: osmId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagUpdate"
+      responses:
+        "200":
+          description: Tags updated successfully
+        "401":
+          description: Not authenticated
+        "404":
+          description: Feature not found
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +272,142 @@ components:
       required:
         - status
 
+    EnergyFeature:
+      type: object
+      required: [id, osmType, osmId, tags]
+      properties:
+        id:
+          type: string
+          description: Unique identifier (osmType + osmId)
+        osmType:
+          type: string
+          enum: [node, way, relation]
+        osmId:
+          type: string
+        lat:
+          type: ["number", "null"]
+        lon:
+          type: ["number", "null"]
+        geometry:
+          $ref: "#/components/schemas/GeoGeometry"
+        tags:
+          $ref: "#/components/schemas/OsmTags"
+        powerType:
+          type: string
+          description: The value of the power= tag (line, substation, generator, tower, plant, cable)
+        generatorSource:
+          type: ["string", "null"]
+          description: Generator source (solar, wind, nuclear, gas, coal, oil, hydro, etc.)
+        name:
+          type: ["string", "null"]
+        version:
+          type: ["integer", "null"]
+        lastEdited:
+          type: ["string", "null"]
+          format: date-time
+
+    GeoGeometry:
+      type: object
+      properties:
+        type:
+          type: string
+        coordinates:
+          type: array
+          items: {}
+
+    OsmTags:
+      type: object
+      additionalProperties:
+        type: string
+
+    EnergyStats:
+      type: object
+      required: [totalFeatures, byType]
+      properties:
+        totalFeatures:
+          type: integer
+        byType:
+          type: array
+          items:
+            $ref: "#/components/schemas/TypeCount"
+        byGeneratorSource:
+          type: array
+          items:
+            $ref: "#/components/schemas/TypeCount"
+
+    TypeCount:
+      type: object
+      required: [type, count]
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+        label:
+          type: ["string", "null"]
+
+    RecentEdit:
+      type: object
+      required: [changesetId, userId, username, createdAt, comment]
+      properties:
+        changesetId:
+          type: string
+        userId:
+          type: string
+        username:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        comment:
+          type: string
+        featuresEdited:
+          type: ["integer", "null"]
+        bbox:
+          type: ["object", "null"]
+
+    OsmUser:
+      type: object
+      required: [id, username]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        changesetCount:
+          type: ["integer", "null"]
+
+    Changeset:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ChangesetInput:
+      type: object
+      required: [comment]
+      properties:
+        comment:
+          type: string
+        source:
+          type: string
+          default: survey
+
+    TagUpdate:
+      type: object
+      required: [changesetId, tags]
+      properties:
+        changesetId:
+          type: string
+        tags:
+          $ref: "#/components/schemas/OsmTags"

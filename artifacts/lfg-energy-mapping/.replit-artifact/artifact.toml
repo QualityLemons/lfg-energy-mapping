@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "LFG Energy Mapping"
+version = "1.0.0"
+id = "artifacts/lfg-energy-mapping"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25210
+
+[services.development]
+run = "pnpm --filter @workspace/lfg-energy-mapping run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/lfg-energy-mapping", "run", "build" ]
+publicDir = "artifacts/lfg-energy-mapping/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25210"
+BASE_PATH = "/"
