@@ -34,3 +34,9 @@ externalPort = 3000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+OSM_CLIENT_ID = "1JPDJNEDB8_kXvmJ-9Yk-q6ZaOOUfZ-LsOwKuWAYSsU"
+OSM_CLIENT_SECRET = " gVxCnrLIK51J9JKb2K89NlE9r-uAVfkrPN9jjIHkKQI "
