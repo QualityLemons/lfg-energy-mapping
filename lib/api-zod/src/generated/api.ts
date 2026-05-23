@@ -50,6 +50,60 @@ export const GetEnergyFeaturesResponse = zod.array(GetEnergyFeaturesResponseItem
 
 
 /**
+ * Returns OpenStreetMap industrial landuse and estate-like features within the given bounding box using Overpass API
+ * @summary Query industrial areas in bounding box
+ */
+export const GetIndustrialAreasQueryParams = zod.object({
+  "south": zod.coerce.number(),
+  "west": zod.coerce.number(),
+  "north": zod.coerce.number(),
+  "east": zod.coerce.number()
+})
+
+export const GetIndustrialAreasResponseItem = zod.object({
+  "id": zod.string().describe('Unique identifier (osmType + osmId)'),
+  "osmType": zod.enum(['node', 'way', 'relation']),
+  "osmId": zod.string(),
+  "lat": zod.number().nullish(),
+  "lon": zod.number().nullish(),
+  "geometry": zod.object({
+  "type": zod.string().optional(),
+  "coordinates": zod.array(zod.unknown()).optional()
+}).optional(),
+  "tags": zod.record(zod.string(), zod.string()),
+  "name": zod.string().nullish(),
+  "landuse": zod.string().nullish(),
+  "industrial": zod.string().nullish()
+})
+export const GetIndustrialAreasResponse = zod.array(GetIndustrialAreasResponseItem)
+
+
+/**
+ * Returns National Grid Electricity Distribution Constraint Management Zones that include the searched postcode
+ * @summary Look up NGED flexibility zones for a postcode
+ */
+export const GetFlexibilityByPostcodeParams = zod.object({
+  "postcode": zod.coerce.string()
+})
+
+export const GetFlexibilityByPostcodeResponse = zod.object({
+  "postcode": zod.string(),
+  "source": zod.string(),
+  "sourceUrl": zod.string().optional(),
+  "zones": zod.array(zod.object({
+  "level": zod.enum(['HV', 'LV']),
+  "code": zod.string(),
+  "name": zod.string(),
+  "licenceArea": zod.string().nullish(),
+  "product": zod.string().nullish(),
+  "substationName": zod.string().nullish(),
+  "substationNumber": zod.string().nullish()
+})),
+  "note": zod.string().optional()
+})
+
+
+/**
  * @summary Get a specific OSM feature's full details
  */
 export const GetEnergyFeatureParams = zod.object({

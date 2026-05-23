@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useGetMe, useLogout } from "@workspace/api-client-react";
+import { getGetMeQueryKey, useGetMe, useLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Map, Activity, ListIcon, Info, LogOut, Home, Leaf } from "lucide-react";
@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+  const { data: user, isLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false } });
   const logout = useLogout();
 
   const handleLogout = () => {

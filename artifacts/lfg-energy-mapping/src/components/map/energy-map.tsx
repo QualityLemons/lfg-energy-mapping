@@ -1,13 +1,22 @@
 import { useState, useMemo, useRef, useCallback } from "react";
-import { useGetEnergyFeatures, getGetEnergyFeaturesQueryKey } from "@workspace/api-client-react";
+import {
+  getGetEnergyFeaturesQueryKey,
+  getGetFlexibilityByPostcodeQueryKey,
+  getGetIndustrialAreasQueryKey,
+  useGetEnergyFeatures,
+  useGetFlexibilityByPostcode,
+  useGetIndustrialAreas,
+  type FlexibilityLookup,
+} from "@workspace/api-client-react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import { fixLeafletIcons } from "@/lib/leaflet-icons";
 import { FeatureDetail } from "@/components/feature-detail";
 import { EpcChoroplethLayer } from "@/components/map/epc-choropleth-layer";
+import { IndustrialAreaLayer } from "@/components/map/industrial-area-layer";
 import { LsoaBoundaryLayer } from "@/components/map/lsoa-boundary-layer";
-import { Search, Plus, Minus, X } from "lucide-react";
+import { Factory, Loader2, MapPin, Search, Zap, Plus, Minus, X } from "lucide-react";
 
 fixLeafletIcons();
 
@@ -29,6 +38,13 @@ const ICONS = {
   plant: createColorIcon('#00ff88'),
   default: createColorIcon('#ffffff'),
 };
+
+const POSTCODE_ICON = L.divIcon({
+  className: "postcode-marker",
+  html: '<div style="background:#f97316;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 2px rgba(249,115,22,0.35),0 2px 8px rgba(0,0,0,0.35);"></div>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
 
 const LINE_COLORS = {
   line: '#ff8800',
@@ -82,12 +98,35 @@ interface PostcodeResult {
   admin_district: string | null;
 }
 
-function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+function normalisePostcode(postcode: string): string {
+  return postcode.toUpperCase().replace(/\s+/g, "");
+}
+
+function PostcodeSearch({
+  mapRef,
+  onResult,
+}: {
+  mapRef: React.MutableRefObject<L.Map | null>;
+  onResult?: (result: PostcodeResult) => void;
+}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PostcodeResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+
+  const flyToResult = useCallback((result: PostcodeResult) => {
+    if (!mapRef.current) return;
+    mapRef.current.flyTo([result.lat, result.lon], 14, { duration: 1.2 });
+  }, [mapRef]);
+
+  const handleResolvedResult = useCallback((result: PostcodeResult) => {
+    flyToResult(result);
+    setQuery(result.postcode);
+    setShowDropdown(false);
+    setResults([]);
+    onResult?.(result);
+  }, [flyToResult, onResult]);
 
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,9 +150,7 @@ function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | nul
             lon: r.longitude,
             admin_district: r.admin_district,
           };
-          flyToResult(result);
-          setQuery(r.postcode);
-          setShowDropdown(false);
+          handleResolvedResult(result);
           return;
         }
       }
@@ -140,9 +177,7 @@ function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | nul
                 admin_district: r.result.admin_district,
               }));
             if (found.length === 1) {
-              flyToResult(found[0]);
-              setQuery(found[0].postcode);
-              setShowDropdown(false);
+              handleResolvedResult(found[0]);
             } else if (found.length > 1) {
               setResults(found);
               setShowDropdown(true);
@@ -161,18 +196,10 @@ function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | nul
     } finally {
       setIsSearching(false);
     }
-  }, [query]);
-
-  const flyToResult = useCallback((result: PostcodeResult) => {
-    if (!mapRef.current) return;
-    mapRef.current.flyTo([result.lat, result.lon], 14, { duration: 1.2 });
-  }, [mapRef]);
+  }, [handleResolvedResult, query]);
 
   const handleSelect = (result: PostcodeResult) => {
-    flyToResult(result);
-    setQuery(result.postcode);
-    setShowDropdown(false);
-    setResults([]);
+    handleResolvedResult(result);
   };
 
   const handleClear = () => {
@@ -183,7 +210,7 @@ function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | nul
   };
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-72">
+    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] w-72">
       <form onSubmit={handleSearch} className="relative">
         <div className="flex items-center bg-background/95 border border-border rounded-md shadow-lg overflow-hidden">
           <Search className="w-4 h-4 ml-3 shrink-0 text-muted-foreground" />
@@ -248,10 +275,127 @@ function PostcodeSearch({ mapRef }: { mapRef: React.MutableRefObject<L.Map | nul
   );
 }
 
+function PostcodeContextPanel({
+  result,
+  flexibility,
+  isFlexLoading,
+  isIndustrialLoading,
+  isFlexError,
+  industrialCount,
+  industrialEnabled,
+  isIndustrialError,
+}: {
+  result: PostcodeResult;
+  flexibility?: FlexibilityLookup;
+  isFlexLoading: boolean;
+  isIndustrialLoading: boolean;
+  isFlexError: boolean;
+  industrialCount: number | null;
+  industrialEnabled: boolean;
+  isIndustrialError: boolean;
+}) {
+  const zones = flexibility?.zones ?? [];
+
+  return (
+    <div className="absolute top-20 left-4 z-[1000] w-80 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-background/95 shadow-lg backdrop-blur">
+      <div className="border-b border-border/60 px-4 py-3">
+        <div className="flex items-center gap-2 font-mono text-sm font-bold text-foreground">
+          <MapPin className="size-4 text-orange-500" />
+          {result.postcode}
+        </div>
+        {result.admin_district && (
+          <div className="mt-1 text-xs font-mono text-muted-foreground">
+            {result.admin_district}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 px-4 py-3">
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              <Zap className="size-3.5 text-yellow-500" />
+              NGED flexibility
+            </div>
+            {isFlexLoading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          </div>
+
+          {isFlexError ? (
+            <div className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-mono text-destructive">
+              Could not load NGED zones.
+            </div>
+          ) : zones.length > 0 ? (
+            <div className="space-y-2">
+              {zones.slice(0, 4).map((zone) => (
+                <div key={`${zone.level}-${zone.code}`} className="rounded border border-border/70 bg-muted/30 px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-mono text-xs font-bold text-foreground">
+                        {zone.name}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                        {zone.code}
+                      </div>
+                    </div>
+                    <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                      zone.level === "HV"
+                        ? "bg-amber-500/15 text-amber-600"
+                        : "bg-cyan-500/15 text-cyan-600"
+                    }`}>
+                      {zone.level}
+                    </span>
+                  </div>
+                  {(zone.product || zone.substationName) && (
+                    <div className="mt-2 space-y-0.5 font-mono text-[11px] leading-snug text-muted-foreground">
+                      {zone.product && <div>{zone.product}</div>}
+                      {zone.substationName && <div>{zone.substationName}</div>}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {zones.length > 4 && (
+                <div className="font-mono text-[11px] text-muted-foreground">
+                  +{zones.length - 4} more zones
+                </div>
+              )}
+            </div>
+          ) : isFlexLoading ? (
+            <div className="rounded border border-border/70 bg-muted/30 px-3 py-2 text-xs font-mono text-muted-foreground">
+              Checking postcode against NGED CMZs...
+            </div>
+          ) : (
+            <div className="rounded border border-border/70 bg-muted/30 px-3 py-2 text-xs font-mono text-muted-foreground">
+              No NGED CMZ listed for this postcode.
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 rounded border border-border/70 bg-muted/30 px-3 py-2">
+          <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            <Factory className="size-3.5 text-purple-500" />
+            Industrial estates
+          </div>
+          <div className="font-mono text-xs text-foreground">
+            {industrialEnabled
+              ? isIndustrialError
+                ? "unavailable"
+                : isIndustrialLoading
+                  ? "loading..."
+                  : industrialCount ?? "0"
+              : "off"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function EnergyMap() {
   const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<{ id: string, type: 'node'|'way'|'relation' } | null>(null);
+  const [selectedPostcode, setSelectedPostcode] = useState<PostcodeResult | null>(null);
   const [showEpc, setShowEpc] = useState(false);
+  const [showIndustrial, setShowIndustrial] = useState(true);
   const [showLsoa, setShowLsoa] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
 
@@ -264,10 +408,60 @@ export function EnergyMap() {
     east: debouncedBounds.getEast(),
   } : null;
 
+  const industrialQueryParams = useMemo(() => {
+    if (!selectedPostcode) return null;
+
+    return {
+      south: selectedPostcode.lat - 0.01,
+      west: selectedPostcode.lon - 0.015,
+      north: selectedPostcode.lat + 0.01,
+      east: selectedPostcode.lon + 0.015,
+    };
+  }, [selectedPostcode]);
+
   const { data: features, isLoading } = useGetEnergyFeatures(
     queryParams as any,
-    { query: { enabled: !!queryParams, queryKey: getGetEnergyFeaturesQueryKey(queryParams as any) } }
+    {
+      query: {
+        enabled: !!queryParams,
+        queryKey: getGetEnergyFeaturesQueryKey(queryParams as any),
+        refetchOnWindowFocus: false,
+        retry: false,
+      },
+    }
   );
+
+  const {
+    data: industrialAreas,
+    isLoading: isIndustrialLoading,
+    isError: isIndustrialError,
+  } = useGetIndustrialAreas(
+    industrialQueryParams as any,
+    {
+      request: { cache: "no-store" },
+      query: {
+        enabled: !!industrialQueryParams && showIndustrial,
+        queryKey: getGetIndustrialAreasQueryKey(industrialQueryParams as any),
+        refetchOnWindowFocus: false,
+        retry: false,
+        staleTime: 60_000,
+      },
+    },
+  );
+
+  const selectedPostcodeKey = selectedPostcode ? normalisePostcode(selectedPostcode.postcode) : "";
+  const {
+    data: flexibility,
+    isLoading: isFlexLoading,
+    isError: isFlexError,
+  } = useGetFlexibilityByPostcode(selectedPostcodeKey, {
+    request: { cache: "no-store" },
+    query: {
+      enabled: !!selectedPostcodeKey,
+      queryKey: getGetFlexibilityByPostcodeQueryKey(selectedPostcodeKey),
+      staleTime: Infinity,
+    },
+  });
 
   return (
     <div className="relative h-full w-full">
@@ -290,6 +484,14 @@ export function EnergyMap() {
 
         {showEpc && <EpcChoroplethLayer />}
         <LsoaBoundaryLayer enabled={showLsoa} />
+        {showIndustrial && industrialAreas && <IndustrialAreaLayer areas={industrialAreas} />}
+
+        {selectedPostcode && (
+          <Marker
+            position={[selectedPostcode.lat, selectedPostcode.lon]}
+            icon={POSTCODE_ICON}
+          />
+        )}
 
         {features?.map((feature) => {
           if (feature.osmType === 'node' && feature.lat && feature.lon) {
@@ -329,7 +531,20 @@ export function EnergyMap() {
       </MapContainer>
 
       {/* Postcode search */}
-      <PostcodeSearch mapRef={mapRef} />
+      <PostcodeSearch mapRef={mapRef} onResult={setSelectedPostcode} />
+
+      {selectedPostcode && (
+        <PostcodeContextPanel
+          result={selectedPostcode}
+          flexibility={flexibility}
+          isFlexLoading={isFlexLoading}
+          isIndustrialLoading={isIndustrialLoading}
+          isFlexError={isFlexError}
+          industrialCount={showIndustrial ? industrialAreas?.length ?? null : null}
+          industrialEnabled={showIndustrial}
+          isIndustrialError={isIndustrialError}
+        />
+      )}
 
       {/* Layer toggles */}
       <div className="absolute top-20 right-4 z-[1000] flex flex-col gap-1.5">
@@ -357,13 +572,32 @@ export function EnergyMap() {
           <span className={`size-2 rounded-full ${showEpc ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
           EPC ratings
         </button>
+        <button
+          onClick={() => setShowIndustrial((v) => !v)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-mono shadow-md transition-colors ${
+            showIndustrial
+              ? "bg-purple-600 border-purple-500 text-white"
+              : "bg-background/90 border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+          }`}
+          title="Toggle OSM industrial estates around the searched postcode"
+        >
+          <span className={`size-2 rounded-full ${showIndustrial ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
+          Industrial estates
+        </button>
+        {showIndustrial && !selectedPostcode && (
+          <div className="max-w-44 rounded-md border border-purple-500/30 bg-background/90 px-3 py-2 text-[11px] leading-snug text-muted-foreground shadow-md">
+            Search a postcode to load nearby OSM industrial areas.
+          </div>
+        )}
       </div>
 
       {/* Loading overlay */}
-      {isLoading && (
+      {(isLoading || isIndustrialLoading) && (
         <div className="absolute bottom-6 left-6 z-[1000] bg-background/90 border border-border px-4 py-2 rounded-md shadow-lg flex items-center gap-3">
           <div className="size-2 bg-primary rounded-full animate-ping" />
-          <span className="font-mono text-xs text-muted-foreground">Scanning grid...</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            {isIndustrialLoading ? "Scanning industrial estates..." : "Scanning grid..."}
+          </span>
         </div>
       )}
 

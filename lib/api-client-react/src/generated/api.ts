@@ -24,9 +24,12 @@ import type {
   ChangesetInput,
   EnergyFeature,
   EnergyStats,
+  FlexibilityLookup,
   GetEnergyFeaturesParams,
+  GetIndustrialAreasParams,
   GetRecentEditsParams,
   HealthStatus,
+  IndustrialArea,
   OsmLoginCallbackParams,
   OsmUser,
   RecentEdit,
@@ -196,6 +199,169 @@ export function useGetEnergyFeatures<TData = Awaited<ReturnType<typeof getEnergy
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetEnergyFeaturesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetIndustrialAreasUrl = (params: GetIndustrialAreasParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/energy/industrial-areas?${stringifiedParams}` : `/api/energy/industrial-areas`
+}
+
+/**
+ * Returns OpenStreetMap industrial landuse and estate-like features within the given bounding box using Overpass API
+ * @summary Query industrial areas in bounding box
+ */
+export const getIndustrialAreas = async (params: GetIndustrialAreasParams, options?: RequestInit): Promise<IndustrialArea[]> => {
+
+  return customFetch<IndustrialArea[]>(getGetIndustrialAreasUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIndustrialAreasQueryKey = (params?: GetIndustrialAreasParams,) => {
+    return [
+    `/api/energy/industrial-areas`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetIndustrialAreasQueryOptions = <TData = Awaited<ReturnType<typeof getIndustrialAreas>>, TError = ErrorType<void>>(params: GetIndustrialAreasParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIndustrialAreas>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIndustrialAreasQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndustrialAreas>>> = ({ signal }) => getIndustrialAreas(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIndustrialAreas>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetIndustrialAreasQueryResult = NonNullable<Awaited<ReturnType<typeof getIndustrialAreas>>>
+export type GetIndustrialAreasQueryError = ErrorType<void>
+
+
+/**
+ * @summary Query industrial areas in bounding box
+ */
+
+export function useGetIndustrialAreas<TData = Awaited<ReturnType<typeof getIndustrialAreas>>, TError = ErrorType<void>>(
+ params: GetIndustrialAreasParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIndustrialAreas>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetIndustrialAreasQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlexibilityByPostcodeUrl = (postcode: string,) => {
+
+
+
+
+  return `/api/energy/flexibility/postcode/${postcode}`
+}
+
+/**
+ * Returns National Grid Electricity Distribution Constraint Management Zones that include the searched postcode
+ * @summary Look up NGED flexibility zones for a postcode
+ */
+export const getFlexibilityByPostcode = async (postcode: string, options?: RequestInit): Promise<FlexibilityLookup> => {
+
+  return customFetch<FlexibilityLookup>(getGetFlexibilityByPostcodeUrl(postcode),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlexibilityByPostcodeQueryKey = (postcode: string,) => {
+    return [
+    `/api/energy/flexibility/postcode/${postcode}`
+    ] as const;
+    }
+
+
+export const getGetFlexibilityByPostcodeQueryOptions = <TData = Awaited<ReturnType<typeof getFlexibilityByPostcode>>, TError = ErrorType<void>>(postcode: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlexibilityByPostcode>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlexibilityByPostcodeQueryKey(postcode);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlexibilityByPostcode>>> = ({ signal }) => getFlexibilityByPostcode(postcode, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(postcode), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlexibilityByPostcode>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlexibilityByPostcodeQueryResult = NonNullable<Awaited<ReturnType<typeof getFlexibilityByPostcode>>>
+export type GetFlexibilityByPostcodeQueryError = ErrorType<void>
+
+
+/**
+ * @summary Look up NGED flexibility zones for a postcode
+ */
+
+export function useGetFlexibilityByPostcode<TData = Awaited<ReturnType<typeof getFlexibilityByPostcode>>, TError = ErrorType<void>>(
+ postcode: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlexibilityByPostcode>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlexibilityByPostcodeQueryOptions(postcode,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

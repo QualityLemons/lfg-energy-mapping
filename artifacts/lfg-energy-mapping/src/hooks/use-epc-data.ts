@@ -196,16 +196,17 @@ export function useEpcData() {
         fetchUkBoundaries(),
       ]);
 
-      const enrichedFeatures = boundaries.features.map((feature) => {
-        const code = feature.properties?.LAD13CD as string;
+      const enrichedFeatures: EpcEnrichedFeature[] = boundaries.features.map((feature) => {
+        const properties = feature.properties as { LAD13CD: string; LAD13NM: string };
+        const code = properties.LAD13CD;
         const epc = epcMap.get(code) ?? null;
         return {
           ...feature,
           properties: {
-            ...feature.properties,
+            ...properties,
             epc,
           },
-        };
+        } as EpcEnrichedFeature;
       });
 
       const allRows = Array.from(epcMap.values());
