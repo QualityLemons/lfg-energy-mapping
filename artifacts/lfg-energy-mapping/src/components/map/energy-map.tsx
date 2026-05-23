@@ -78,8 +78,11 @@ export function EnergyMap() {
   return (
     <div className="relative h-full w-full">
       <MapContainer
-        center={[37.7749, -122.4194]}
-        zoom={13}
+        center={[52.48, -1.9]}
+        zoom={10}
+        minZoom={9}
+        maxBounds={[[51.8, -2.8], [53.1, -0.8]]}
+        maxBoundsViscosity={0.8}
         className="h-full w-full z-0 bg-gray-900"
         zoomControl={false}
       >
