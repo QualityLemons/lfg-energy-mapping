@@ -1,4 +1,5 @@
-import { GeoJSON } from "react-leaflet";
+import { GeoJSON, useMap } from "react-leaflet";
+import type { FeatureCollection } from "geojson";
 import type { Layer, PathOptions, LeafletMouseEvent } from "leaflet";
 import { useLsoaData } from "@/hooks/use-lsoa-data";
 import type { LsoaFeatureProperties } from "@/hooks/use-lsoa-data";
@@ -22,15 +23,13 @@ interface Props {
   enabled: boolean;
 }
 
-export function LsoaBoundaryLayer({ enabled }: Props) {
-  const { data, isLoading } = useLsoaData({ enabled });
-
-  if (!enabled || isLoading || !data) return null;
+function LsoaGeoJSON({ geojson }: { geojson: FeatureCollection }) {
+  const map = useMap();
 
   return (
     <GeoJSON
       key="lsoa-boundaries"
-      data={data.geojson}
+      data={geojson}
       style={(feature): PathOptions => {
         const ladName = (feature?.properties as LsoaFeatureProperties)?.ladName ?? "";
         return {
@@ -64,7 +63,19 @@ export function LsoaBoundaryLayer({ enabled }: Props) {
         layer.on("mouseout", (e: LeafletMouseEvent) => {
           (e.target as any).setStyle({ weight: 1, fillOpacity: 0.04, opacity: 0.7 });
         });
+        layer.on("click", () => {
+          const bounds = (layer as any).getBounds();
+          if (bounds) map.fitBounds(bounds, { padding: [40, 40] });
+        });
       }}
     />
   );
+}
+
+export function LsoaBoundaryLayer({ enabled }: Props) {
+  const { data, isLoading } = useLsoaData({ enabled });
+
+  if (!enabled || isLoading || !data) return null;
+
+  return <LsoaGeoJSON geojson={data.geojson} />;
 }
