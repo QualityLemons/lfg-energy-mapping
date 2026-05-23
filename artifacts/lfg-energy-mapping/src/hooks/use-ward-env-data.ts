@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import Papa from "papaparse";
+import * as XLSX from "xlsx";
 
 export interface WardRow {
   wd25cd: string;
@@ -76,18 +76,18 @@ export function useWardEnvData() {
   return useQuery<WardEnvDataResult>({
     queryKey: ["ward-env-data"],
     queryFn: async () => {
-      const resp = await fetch(`${import.meta.env.BASE_URL}ward-env-data.csv`);
-      const text = await resp.text();
-      const result = Papa.parse<Record<string, string>>(text, {
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
-      });
+      const resp = await fetch(
+        "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/local-data/Ward-local-env-data-April26-v2.xlsx"
+      );
+      const arrayBuffer = await resp.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
       const wardMap = new Map<string, WardRow>();
       const ladBuckets = new Map<string, WardRow[]>();
 
-      for (const r of result.data) {
+      for (const r of rows) {
         const row: WardRow = {
           wd25cd: r["wd25cd"] as string,
           ward: r["Ward"] as string,
