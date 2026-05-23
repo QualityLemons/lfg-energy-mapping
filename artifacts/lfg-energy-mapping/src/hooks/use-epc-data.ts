@@ -24,8 +24,34 @@ export interface EpcBandRow {
   DEFG_pct: number;
 }
 
+export interface EpcMsoaRow {
+  msoa21: string;
+  A_n: number;
+  B_n: number;
+  C_n: number;
+  D_n: number;
+  E_n: number;
+  F_n: number;
+  G_n: number;
+  number_of_epcs: number;
+  A_pct: number;
+  B_pct: number;
+  C_pct: number;
+  D_pct: number;
+  E_pct: number;
+  F_pct: number;
+  G_pct: number;
+  ABC_n: number;
+  ABC_pct: number;
+  DEFG_n: number;
+  DEFG_pct: number;
+}
+
 const EPC_BANDS_URL =
   "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-bands-by-oslaua-April25.csv";
+
+const EPC_MSOA_URL =
+  "https://raw.githubusercontent.com/friendsoftheearth-data/friendsoftheearth-data.github.io/main/datasets/epcs/epc-bands-by-msoa21-April25.csv";
 
 const UK_LAD_GEOJSON_URL =
   "https://raw.githubusercontent.com/martinjc/UK-GeoJSON/master/json/administrative/gb/lad.json";
@@ -85,6 +111,28 @@ export function getEpcColor(abcPct: number | null | undefined): string {
   if (abcPct >= 0.28) return "#fb923c";
   if (abcPct >= 0.2) return "#ef4444";
   return "#991b1b";
+}
+
+export function useEpcMsoaData() {
+  return useQuery<Map<string, EpcMsoaRow>>({
+    queryKey: ["epc-msoa-data"],
+    queryFn: async () => {
+      const response = await fetch(EPC_MSOA_URL);
+      const text = await response.text();
+      const result = Papa.parse<EpcMsoaRow>(text, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+      });
+      const map = new Map<string, EpcMsoaRow>();
+      for (const row of result.data) {
+        if (row.msoa21) map.set(row.msoa21, row);
+      }
+      return map;
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
 }
 
 export function useEpcData() {

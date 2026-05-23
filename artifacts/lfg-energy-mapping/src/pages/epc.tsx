@@ -3,8 +3,8 @@ import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Layout } from "@/components/layout";
 import { EpcChoroplethLayer } from "@/components/map/epc-choropleth-layer";
-import { useEpcData, getEpcColor } from "@/hooks/use-epc-data";
-import type { EpcBandRow } from "@/hooks/use-epc-data";
+import { useEpcData, useEpcMsoaData, getEpcColor } from "@/hooks/use-epc-data";
+import type { EpcBandRow, EpcMsoaRow } from "@/hooks/use-epc-data";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -111,19 +111,68 @@ function AreaRankList({ areas, label, selectedCode, onSelect }: {
   );
 }
 
-function SelectedAreaPanel({ name, epc, postcode }: { name: string; epc: EpcBandRow; postcode?: string }) {
+function EpcBandChart({ epc, height = 120 }: { epc: EpcBandRow | EpcMsoaRow; height?: number }) {
   const bands = ["A", "B", "C", "D", "E", "F", "G"].map((b) => ({
     band: b,
-    count: epc[`${b}_n` as keyof EpcBandRow] as number,
-    pct: ((epc[`${b}_pct` as keyof EpcBandRow] as number) * 100).toFixed(1),
+    count: epc[`${b}_n` as keyof typeof epc] as number,
+    pct: ((epc[`${b}_pct` as keyof typeof epc] as number) * 100).toFixed(1),
   }));
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={bands} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+        <XAxis dataKey="band" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11, fontFamily: "monospace" }} />
+        <YAxis hide />
+        <RechartsTooltip
+          cursor={{ fill: "hsl(var(--muted)/0.3)" }}
+          contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "4px", fontFamily: "monospace", fontSize: "11px" }}
+          formatter={(value, _name, props) => [`${props.payload.pct}% (${(value as number).toLocaleString()})`, "Homes"]}
+        />
+        <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+          {bands.map((entry) => (
+            <Cell key={entry.band} fill={BAND_COLORS[entry.band]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
+function SelectedAreaPanel({
+  name,
+  epc,
+  postcode,
+  msoa,
+}: {
+  name: string;
+  epc: EpcBandRow;
+  postcode?: string;
+  msoa?: { code: string; name: string; epc: EpcMsoaRow } | null;
+}) {
   return (
     <div className="space-y-3">
+      {/* MSOA-level panel — shown when postcode search resolves to a neighbourhood */}
+      {msoa && (
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <div>
+            <p className="text-xs font-mono text-primary/80 uppercase tracking-wider font-bold">Neighbourhood (MSOA)</p>
+            <h3 className="font-mono font-bold text-foreground text-sm mt-0.5 leading-tight">{msoa.name}</h3>
+            {postcode && <p className="text-xs font-mono text-muted-foreground/70">via {postcode}</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="font-mono text-xs" style={{ borderColor: getEpcColor(msoa.epc.ABC_pct), color: getEpcColor(msoa.epc.ABC_pct) }}>
+              {(msoa.epc.ABC_pct * 100).toFixed(1)}% A–C
+            </Badge>
+            <span className="text-xs text-muted-foreground font-mono">{msoa.epc.number_of_epcs.toLocaleString()} certs</span>
+          </div>
+          <EpcBandChart epc={msoa.epc} height={100} />
+        </div>
+      )}
+
+      {/* LAD-level panel */}
       <div>
-        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Selected Area</p>
+        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{msoa ? "Local Authority" : "Selected Area"}</p>
         <h3 className="font-mono font-bold text-foreground text-base mt-0.5">{name}</h3>
-        {postcode && (
+        {!msoa && postcode && (
           <p className="text-xs font-mono text-muted-foreground mt-0.5">via postcode {postcode}</p>
         )}
         <div className="flex items-center gap-2 mt-1">
@@ -133,22 +182,7 @@ function SelectedAreaPanel({ name, epc, postcode }: { name: string; epc: EpcBand
           <span className="text-xs text-muted-foreground font-mono">{epc.number_of_epcs.toLocaleString()} certs</span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={120}>
-        <BarChart data={bands} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-          <XAxis dataKey="band" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11, fontFamily: "monospace" }} />
-          <YAxis hide />
-          <RechartsTooltip
-            cursor={{ fill: "hsl(var(--muted)/0.3)" }}
-            contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "4px", fontFamily: "monospace", fontSize: "11px" }}
-            formatter={(value, _name, props) => [`${props.payload.pct}% (${(value as number).toLocaleString()})`, "Homes"]}
-          />
-          <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-            {bands.map((entry) => (
-              <Cell key={entry.band} fill={BAND_COLORS[entry.band]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      <EpcBandChart epc={epc} height={120} />
     </div>
   );
 }
@@ -187,16 +221,26 @@ interface PostcodeResult {
   lon: number;
   adminDistrictCode: string | null;
   adminDistrict: string | null;
+  msoaCode: string | null;
+  msoaName: string | null;
 }
 
 function EpcPostcodeSearch({
   mapRef,
   epcMap,
+  msoaMap,
   onResult,
 }: {
   mapRef: React.MutableRefObject<L.Map | null>;
   epcMap: Map<string, EpcBandRow> | undefined;
-  onResult: (postcode: string, code: string, name: string, epc: EpcBandRow) => void;
+  msoaMap: Map<string, EpcMsoaRow> | undefined;
+  onResult: (
+    postcode: string,
+    code: string,
+    name: string,
+    epc: EpcBandRow,
+    msoa: { code: string; name: string; epc: EpcMsoaRow } | null
+  ) => void;
 }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<PostcodeResult[]>([]);
@@ -225,6 +269,8 @@ function EpcPostcodeSearch({
             lon: json.result.longitude,
             adminDistrictCode: json.result.codes?.admin_district ?? null,
             adminDistrict: json.result.admin_district ?? null,
+            msoaCode: json.result.codes?.msoa ?? null,
+            msoaName: json.result.msoa ?? null,
           });
           return;
         }
@@ -250,6 +296,8 @@ function EpcPostcodeSearch({
                 lon: r.result.longitude,
                 adminDistrictCode: r.result.codes?.admin_district ?? null,
                 adminDistrict: r.result.admin_district ?? null,
+                msoaCode: r.result.codes?.msoa ?? null,
+                msoaName: r.result.msoa ?? null,
               }));
             if (found.length === 1) {
               applyResult(found[0]);
@@ -278,18 +326,27 @@ function EpcPostcodeSearch({
     setShowDropdown(false);
     setSuggestions([]);
 
-    mapRef.current?.flyTo([result.lat, result.lon], 9, { duration: 1.2 });
+    mapRef.current?.flyTo([result.lat, result.lon], 11, { duration: 1.2 });
 
     const code = result.adminDistrictCode;
     const name = result.adminDistrict ?? "Unknown";
     const epc = code ? epcMap?.get(code) : undefined;
 
+    const msoaCode = result.msoaCode;
+    const msoaName = result.msoaName ?? msoaCode ?? "Unknown";
+    const msoaEpc = msoaCode ? msoaMap?.get(msoaCode) : undefined;
+    const msoa = msoaCode && msoaEpc ? { code: msoaCode, name: msoaName, epc: msoaEpc } : null;
+
     if (code && epc) {
-      onResult(result.postcode, code, name, epc);
+      onResult(result.postcode, code, name, epc, msoa);
+    } else if (msoa) {
+      // We have MSOA data even if no LAD match — still show what we have
+      setError(`No local authority EPC data for ${name}, showing neighbourhood only`);
+      onResult(result.postcode, code ?? "", name, epc ?? {} as EpcBandRow, msoa);
     } else {
       setError(`No EPC data found for ${name}`);
     }
-  }, [mapRef, epcMap, onResult]);
+  }, [mapRef, epcMap, msoaMap, onResult]);
 
   const handleClear = () => {
     setQuery("");
@@ -362,11 +419,24 @@ function EpcPostcodeSearch({
 
 export default function EpcPage() {
   const { data, isLoading } = useEpcData();
-  const [selectedArea, setSelectedArea] = useState<{ name: string; epc: EpcBandRow; postcode?: string; code: string } | null>(null);
+  const { data: msoaMap } = useEpcMsoaData();
+  const [selectedArea, setSelectedArea] = useState<{
+    name: string;
+    epc: EpcBandRow;
+    postcode?: string;
+    code: string;
+    msoa?: { code: string; name: string; epc: EpcMsoaRow } | null;
+  } | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
-  const handlePostcodeResult = useCallback((postcode: string, code: string, name: string, epc: EpcBandRow) => {
-    setSelectedArea({ name, epc, postcode, code });
+  const handlePostcodeResult = useCallback((
+    postcode: string,
+    code: string,
+    name: string,
+    epc: EpcBandRow,
+    msoa: { code: string; name: string; epc: EpcMsoaRow } | null
+  ) => {
+    setSelectedArea({ name, epc, postcode, code, msoa });
   }, []);
 
   const handleAreaClick = useCallback((name: string, epc: EpcBandRow) => {
@@ -427,6 +497,7 @@ export default function EpcPage() {
             <EpcPostcodeSearch
               mapRef={mapRef}
               epcMap={data.epcMap}
+              msoaMap={msoaMap}
               onResult={handlePostcodeResult}
             />
           )}
@@ -485,12 +556,13 @@ export default function EpcPage() {
                         name={selectedArea.name}
                         epc={selectedArea.epc}
                         postcode={selectedArea.postcode}
+                        msoa={selectedArea.msoa}
                       />
                     </CardContent>
                   </Card>
                 ) : (
                   <p className="text-xs text-muted-foreground font-mono italic">
-                    Search a postcode above, or click an area on the map, to see its breakdown.
+                    Search a postcode above to see neighbourhood-level data, or click an area on the map.
                   </p>
                 )}
 
