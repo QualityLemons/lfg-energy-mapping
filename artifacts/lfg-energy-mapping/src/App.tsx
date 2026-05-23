@@ -8,6 +8,7 @@ import StatsPage from "@/pages/stats";
 import RecentEditsPage from "@/pages/recent";
 import ContributePage from "@/pages/contribute";
 import EpcPage from "@/pages/epc";
+import EnvironmentPage from "@/pages/environment";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/recent" component={RecentEditsPage} />
       <Route path="/contribute" component={ContributePage} />
       <Route path="/epc" component={EpcPage} />
+      <Route path="/environment" component={EnvironmentPage} />
       <Route component={NotFound} />
     </Switch>
   );
