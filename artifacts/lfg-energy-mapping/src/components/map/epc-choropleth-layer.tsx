@@ -5,25 +5,28 @@ import type { EpcBandRow } from "@/hooks/use-epc-data";
 
 interface Props {
   onAreaClick?: (name: string, epc: EpcBandRow) => void;
+  selectedCode?: string | null;
 }
 
-export function EpcChoroplethLayer({ onAreaClick }: Props) {
+export function EpcChoroplethLayer({ onAreaClick, selectedCode }: Props) {
   const { data, isLoading } = useEpcData();
 
   if (isLoading || !data) return null;
 
   return (
     <GeoJSON
-      key="epc-choropleth"
+      key={`epc-choropleth-${selectedCode ?? "none"}`}
       data={data.geojson}
       style={(feature): PathOptions => {
-        const abcPct = (feature?.properties?.epc as EpcBandRow | null)?.ABC_pct;
+        const props = feature?.properties as { LAD13CD: string; epc: EpcBandRow | null };
+        const abcPct = props?.epc?.ABC_pct;
+        const isSelected = selectedCode && props?.LAD13CD === selectedCode;
         return {
           fillColor: getEpcColor(abcPct),
-          weight: 0.8,
+          weight: isSelected ? 3 : 0.8,
           opacity: 1,
-          color: "#ffffff",
-          fillOpacity: 0.7,
+          color: isSelected ? "#f97316" : "#ffffff",
+          fillOpacity: isSelected ? 0.9 : 0.7,
         };
       }}
       onEachFeature={(feature, layer: Layer) => {
@@ -51,7 +54,12 @@ export function EpcChoroplethLayer({ onAreaClick }: Props) {
             (e.target as any).setStyle({ weight: 2, color: "#1e293b", fillOpacity: 0.85 });
           });
           layer.on("mouseout", (e: LeafletMouseEvent) => {
-            (e.target as any).setStyle({ weight: 0.8, color: "#ffffff", fillOpacity: 0.7 });
+            const isSelected = selectedCode && props.LAD13CD === selectedCode;
+            (e.target as any).setStyle({
+              weight: isSelected ? 3 : 0.8,
+              color: isSelected ? "#f97316" : "#ffffff",
+              fillOpacity: isSelected ? 0.9 : 0.7,
+            });
           });
           layer.on("click", () => {
             if (onAreaClick) onAreaClick(name, epc);
